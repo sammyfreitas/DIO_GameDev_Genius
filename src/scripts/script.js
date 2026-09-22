@@ -1,109 +1,30 @@
-let order = [];
-let clickedOrder = [];
-let score = 0;
-
-// 0 - verde
-// 1 - vermelho
-// 2 - amarelo
-// 3 - azul
-
-const blue = document.querySelector('.blue');
-const red = document.querySelector('.red');
-const green = document.querySelector('.green');
-const yellow = document.querySelector('.yellow');
-
-// cria ordem aletória de cores
-let shuffleOrder = () => {
-    let colorOrder = Math.floor(Math.random() * 4);
-
-    order[order.length] = colorOrder;
-    clickedOrder = [];
-
-    for(let i in order) {
-        let elementColor = createColorElement(order[i]);
-        lightColor(elementColor, Number(i) + 1);
-    }
-}
-
-// acende a próxima cor
-let lightColor = (element, number) => {
-    number = number * 500;
-    setTimeout(() => {
-        element.classList.add('selected');
-    }, number - 250);
-    setTimeout(() => {
-        element.classList.remove('selected');
-    });
-}
-
-// checa se os botões clicados são os mesmos da ordem gerada no jogo
-let checkOrder = () => {
-    for(let i in clickedOrder) {
-        if(clickedOrder[i] != order[i]) {
-            gameOver();
-            break;
-        }
-    }
-
-    if(clickedOrder.length == order.length) {
-        alert(`Pontuação: ${score}\nVocê acertou! Iniciando próximo nível!`);
-        nextLevel();
-    }
-}
-
-// função para o clique do usuário
-let click = (color) => {
-    clickedOrder[clickedOrder.length] = color;
-    createColorElement(color).classList.add('selected');
-
-    setTimeout(() => {
-        createColorElement(color).classList.remove('selected');
-        checkOrder();
-    },250);
-}
-
-// função que retorna a cor
-let createColorElement = (color) => {
-    if(color == 0) {
-        return green;
-    } else if(color == 1) {
-        return red;
-    } else if (color == 2) {
-        return yellow;
-    } else if (color == 3) {
-        return blue;
-    }
-}
-
-// função para próximo nível do jogo
-let nextLevel = () => {
-    score++;
-    shuffleOrder();
-}
-
-// função para game over
-let gameOver = () => {
-    alert(`Pontuação: ${score}!\nVocê perdeu o jogo!\nClique em OK para iniciar um novo jogo`);
-    order = [];
-    clickedOrder = [];
-
-    playGame();
-}
-
-// função de início do jogo
-let playGame = () => {
-    alert('Bem vindo ao Genius! Iniciando novo jogo!');
-    score = 0;
-
-    nextLevel();
-}
-
-// eventos de clique para as cores
-green.onclick = () => click(0);
-red.onclick = () => click(1);
-yellow.onclick = () => click(2);
-blue.onclick = () => click(3);
-
-
-// iniciando o jogo
-playGame();
+const pads=[...document.querySelectorAll('.pad')];
+const $=id=>document.getElementById(id);
+const ui={level:$('levelValue'),score:$('scoreValue'),errors:$('errorsValue'),time:$('timeValue'),timeLabel:$('timeLabel'),centerLevel:$('centerLevel'),centerStatus:$('centerStatus'),message:$('messageText'),accuracy:$('accuracyValue'),progress:$('progressBar'),progressText:$('progressText'),bestScore:$('bestScore'),bestLevel:$('bestLevel'),start:$('startButton'),difficulty:$('difficulty'),sound:$('soundToggle'),dialog:$('resultDialog')};
+let state={mode:'classic',sequence:[],input:[],level:0,score:0,errors:0,clicks:0,correct:0,running:false,accepting:false,sound:true,startTime:0,roundStart:0,timer:null,remaining:60};
+const speeds={easy:650,normal:480,hard:330};
+const tones=[329.63,261.63,220,392];
+let audioCtx;
+function tone(i,duration=.12){if(!state.sound)return;audioCtx??=new(window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.frequency.value=tones[i];o.type='sine';g.gain.setValueAtTime(.08,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+duration);o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+duration)}
+function wait(ms){return new Promise(r=>setTimeout(r,ms))}
+function setPads(enabled){pads.forEach(p=>p.disabled=!enabled)}
+function flash(i,duration=260){const p=pads[i];p.classList.add('active');tone(i,duration/1000);setTimeout(()=>p.classList.remove('active'),duration)}
+function message(text,status='JOGANDO'){ui.message.textContent=text;ui.centerStatus.textContent=status}
+function formatTime(sec){sec=Math.max(0,Math.floor(sec));return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`}
+function updateUI(){ui.level.textContent=state.level;ui.centerLevel.textContent=state.level||'—';ui.score.textContent=state.score.toLocaleString('pt-BR');ui.errors.textContent=state.errors;const acc=state.clicks?Math.round(state.correct/state.clicks*100):null;ui.accuracy.textContent=acc===null?'—':`${acc}%`;const max=state.mode==='classic'?10:Math.max(10,state.level+1);const pct=state.mode==='classic'?Math.min(100,state.level/10*100):Math.min(100,state.level/max*100);ui.progress.style.width=`${pct}%`;ui.progressText.textContent=state.mode==='classic'?`${state.level} / 10`:`nível ${state.level}`}
+function loadRecords(){ui.bestScore.textContent=Number(localStorage.getItem('geniusBestScore')||0).toLocaleString('pt-BR');ui.bestLevel.textContent=localStorage.getItem('geniusBestLevel')||0}
+function saveRecords(){const bs=Number(localStorage.getItem('geniusBestScore')||0),bl=Number(localStorage.getItem('geniusBestLevel')||0);if(state.score>bs)localStorage.setItem('geniusBestScore',state.score);if(state.level>bl)localStorage.setItem('geniusBestLevel',state.level);loadRecords()}
+async function showSequence(){state.accepting=false;setPads(false);message('Observe a sequência…','OBSERVE');await wait(550);const speed=speeds[ui.difficulty.value];for(const color of state.sequence){flash(color,Math.max(160,speed*.55));await wait(speed)}state.input=[];state.roundStart=performance.now();state.accepting=true;setPads(true);message('Sua vez. Repita a sequência.','SUA VEZ')}
+async function nextRound(){if(!state.running)return;state.level++;state.sequence.push(Math.floor(Math.random()*4));updateUI();await showSequence()}
+function startTimer(){clearInterval(state.timer);state.startTime=Date.now();state.remaining=60;ui.timeLabel.textContent='RESTANTE';ui.time.textContent='01:00';state.timer=setInterval(()=>{state.remaining=60-(Date.now()-state.startTime)/1000;ui.time.textContent=formatTime(state.remaining);if(state.remaining<=0)finishGame('Tempo encerrado!')},200)}
+function startGame(){clearInterval(state.timer);state.sequence=[];state.input=[];state.level=0;state.score=0;state.errors=0;state.clicks=0;state.correct=0;state.running=true;state.accepting=false;ui.start.textContent='Reiniciar partida';ui.difficulty.disabled=true;document.querySelectorAll('.segment').forEach(b=>b.disabled=true);if(state.mode==='timed')startTimer();else{state.startTime=Date.now();ui.timeLabel.textContent='TEMPO';ui.time.textContent='00:00';state.timer=setInterval(()=>ui.time.textContent=formatTime((Date.now()-state.startTime)/1000),500)}updateUI();nextRound()}
+async function handlePad(color){if(!state.running||!state.accepting)return;flash(color);state.clicks++;const expected=state.sequence[state.input.length];if(color!==expected){state.errors++;state.score=Math.max(0,state.score-75);updateUI();state.accepting=false;setPads(false);document.querySelector('.genius').classList.add('shake');setTimeout(()=>document.querySelector('.genius').classList.remove('shake'),300);message('Ops! Sequência incorreta. Observe novamente.','ERRO');await wait(700);if(state.errors>=5){finishGame('Limite de erros atingido.');return}await showSequence();return}state.correct++;state.input.push(color);state.score+=10+state.level*4;updateUI();if(state.input.length===state.sequence.length){state.accepting=false;setPads(false);const responseSeconds=(performance.now()-state.roundStart)/1000;const speedBonus=Math.max(0,Math.round(180-responseSeconds*18));state.score+=100+state.level*20+speedBonus;updateUI();message(`Nível ${state.level} concluído! + bônus de velocidade.`,'ACERTOU');await wait(650);if(state.mode==='classic'&&state.level>=10){finishGame('Você concluiu os 10 níveis!');return}nextRound()}}
+function finishGame(reason){if(!state.running)return;state.running=false;state.accepting=false;setPads(false);clearInterval(state.timer);ui.difficulty.disabled=false;document.querySelectorAll('.segment').forEach(b=>b.disabled=false);ui.start.innerHTML='Iniciar partida <span>→</span>';const elapsed=state.mode==='timed'?60:Math.max(1,(Date.now()-state.startTime)/1000);const accuracy=state.clicks?state.correct/state.clicks:1;const finalBonus=Math.max(0,Math.round(state.level*80*accuracy-state.errors*30+(state.mode==='classic'?Math.max(0,600-elapsed*4):0)));state.score+=finalBonus;updateUI();saveRecords();message(reason,'FIM');$('resultTitle').textContent=reason;$('resultText').textContent=`Bônus final de ${finalBonus.toLocaleString('pt-BR')} pontos considerando nível, precisão, erros e desempenho.`;$('resultScore').textContent=state.score.toLocaleString('pt-BR');$('resultLevel').textContent=state.level;$('resultErrors').textContent=state.errors;ui.dialog.showModal()}
+pads.forEach(p=>p.addEventListener('click',()=>handlePad(Number(p.dataset.color))));
+document.querySelectorAll('.segment').forEach(btn=>btn.addEventListener('click',()=>{if(state.running)return;document.querySelectorAll('.segment').forEach(b=>b.classList.remove('active'));btn.classList.add('active');state.mode=btn.dataset.mode;ui.timeLabel.textContent=state.mode==='timed'?'RESTANTE':'TEMPO';ui.time.textContent=state.mode==='timed'?'01:00':'00:00';ui.progressText.textContent=state.mode==='classic'?'0 / 10':'nível 0'}));
+ui.start.addEventListener('click',startGame);
+ui.sound.addEventListener('click',()=>{state.sound=!state.sound;ui.sound.textContent=state.sound?'🔊 Som ativado':'🔇 Som desativado';ui.sound.setAttribute('aria-pressed',String(state.sound))});
+$('themeToggle').addEventListener('click',()=>{const next=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=next;localStorage.setItem('geniusTheme',next)});
+$('playAgain').addEventListener('click',()=>{ui.dialog.close();startGame()});$('closeDialog').addEventListener('click',()=>ui.dialog.close());
+$('resetRecord').addEventListener('click',()=>{localStorage.removeItem('geniusBestScore');localStorage.removeItem('geniusBestLevel');loadRecords()});
+document.documentElement.dataset.theme=localStorage.getItem('geniusTheme')||'dark';document.getElementById('year').textContent=new Date().getFullYear();setPads(false);loadRecords();updateUI();
